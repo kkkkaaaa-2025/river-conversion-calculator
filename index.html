@@ -177,14 +177,14 @@
     el.textContent = "";
   }
 
-  function buildWorkerUrl({ interval, startMs, endMs }) {
-    const u = new URL(WORKER_BASE + "/");
-    u.searchParams.set("path", API_PATH);
-    u.searchParams.set("interval", interval);
-    u.searchParams.set("startTime", String(startMs));
-    u.searchParams.set("endTime", String(endMs));
-    return u.toString();
-  }
+function buildWorkerUrl({ interval, startMs, endMs }) {
+  // 안전한 방식: path 파라미터 쓰지 않고, 엔드포인트를 URL path로 직접 호출
+  const u = new URL(WORKER_BASE + API_PATH);
+  u.searchParams.set("interval", interval);
+  u.searchParams.set("startTime", String(startMs));
+  u.searchParams.set("endTime", String(endMs));
+  return u.toString();
+}
 
   function setLoading(isLoading) {
     const btn = $("btn");
