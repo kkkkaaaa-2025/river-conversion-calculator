@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>River Pts Conversion Tracker</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:16px;line-height:1.35}
+    .card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:10px 0}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    label{font-size:13px;color:#374151}
+    input,select,button{font-size:14px;padding:10px;border:1px solid #d1d5db;border-radius:10px}
+    input{min-width:220px}
+    button{cursor:pointer}
+    .kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .k{font-size:12px;color:#6b7280}
+    .v{font-size:18px;font-weight:700}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{border-bottom:1px solid #eee;padding:8px;text-align:right}
+    th:first-child,td:first-child{text-align:left}
+    .muted{color:#6b7280}
+    .err{color:#b91c1c;white-space:pre-wrap}
+    .ok{color:#065f46}
+  </style>
+</head>
+<body>
+  <h2>River Pts → RIVER 전환 트래커</h2>
+  <div class="muted">api-airdrop.river.inc 의 pts-conversion-chart 데이터를 불러와 누적/비율을 계산합니다.</div>
+
+  <div class="card">
+    <div class="row">
+      <label>interval</label>
+      <select id="interval">
+        <option value="1d">1d</option>
+        <option value="4h" selected>4h</option>
+        <option value="1h">1h</option>
+      </select>
+
+      <label>start</label>
+      <input id="start" type="datetime-local" />
+
+      <label>end</label>
+      <input id="end" type="datetime-local" />
+
+      <button id="btn">불러오기</button>
+    </div>
+
+    <div class="muted" style="margin-top:8px">
+      팁: 비우고 눌러도 됩니다(최근 7일 자동).
+    </div>
+    <div id="status" class="muted" style="margin-top:10px"></div>
+    <div id="error" class="err"></div>
+  </div>
+
+  <div class="card">
+    <div class="kpi">
+      <div>
+        <div class="k">최근 구간 Actual / Expected</div>
+        <div class="v" id="lastRate">-</div>
+      </div>
+      <div>
+        <div class="k">갭 (Actual - Expected)</div>
+        <div class="v" id="gap">-</div>
+      </div>
+      <div>
+        <div class="k">누적 Pts</div>
+        <div class="v" id="sumPts">-</div>
+      </div>
+      <div>
+        <div class="k">누적 Tokens(RIVER)</div>
+        <div class="v" id="sumTok">-</div>
+      </div>
+      <div>
+        <div class="k">누적 실현 환율(누적 Tokens / 누적 Pts)</div>
+        <div class="v" id="cumRate">-</div>
+      </div>
+      <div>
+        <div class="k">마지막 타임스탬프(UTC)</div>
+        <div class="v" id="lastTs">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><b>구간별 데이터</b> <span class="muted">(ptsAmount / tokensAmount / rates)</span></div>
+      <div class="muted" id="count">-</div>
+    </div>
+    <div style="overflow:auto;max-height:55vh;margin-top:10px">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>timestamp(UTC)</th>
+            <th>ptsAmount</th>
+            <th>tokensAmount</th>
+            <th>actualRate</th>
+            <th>expectedRate</th>
+            <th>구간환율(tokens/pts)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+  const $ = (id)=>document.getElementById(id);
+
+  function toLocalInputValue(d){
+    // yyyy-MM-ddTHH:mm (local)
+    const pad = (n)=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function fmt(n, digits=2){
+    if(n === null || n === undefined || Number.isNaN(n)) return '-';
+    return Number(n).toLocaleString(undefined,{maximumFractionDigits:digits});
+  }
+
+  function fmtRate(n){
+    if(n === null || n === undefined || Number.isNaN(n)) return '-';
+    return Number(n).toFixed(6);
+  }
+
+  function msFromLocalInput(value){
+    // value like "2025-12-13T15:30"
+    if(!value) return null;
+    const d = new Date(value);
+    return d.getTime();
+  }
+
+  async function fetchChart({interval, startMs, endMs}){
+    const base = "https://api-airdrop.river.inc/s2/pts-conversion-chart";
+    const params = new URLSearchParams({ interval });
+    if(startMs) params.set("startTime", String(startMs));
+    if(endMs) params.set("endTime", String(endMs));
+    const url = `${base}?${params.toString()}`;
+
+    $("status").textContent = `GET ${url}`;
+    $("error").textContent = "";
+
+    const res = await fetch(url, { headers: { "accept":"application/json" } });
+    if(!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    return res.json();
+  }
+
+  function render(data){
+    const rows = (data?.data || []).filter(r => r && r.timestamp);
+    $("count").textContent = `rows: ${rows.length}`;
+    const tbody = $("tbl").querySelector("tbody");
+    tbody.innerHTML = "";
+
+    let sumPts = 0, sumTok = 0;
+
+    for(const r of rows){
+      const pts = Number(r.ptsAmount || 0);
+      const tok = Number(r.tokensAmount || 0);
+      sumPts += pts;
+      sumTok += tok;
+
+      const segRate = pts > 0 ? (tok/pts) : null;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.timestamp}</td>
+        <td>${fmt(pts,2)}</td>
+        <td>${fmt(tok,6)}</td>
+        <td>${fmtRate(r.actualRate)}</td>
+        <td>${fmtRate(r.expectedRate)}</td>
+        <td>${segRate===null?'-':fmtRate(segRate)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    const last = rows[rows.length-1];
+    const lastActual = last ? Number(last.actualRate) : null;
+    const lastExpected = last ? Number(last.expectedRate) : null;
+
+    $("lastRate").textContent = (lastActual!=null && lastExpected!=null)
+      ? `${fmtRate(lastActual)} / ${fmtRate(lastExpected)}`
+      : "-";
+
+    $("gap").textContent = (lastActual!=null && lastExpected!=null)
+      ? fmtRate(lastActual - lastExpected)
+      : "-";
+
+    $("sumPts").textContent = fmt(sumPts,2);
+    $("sumTok").textContent = fmt(sumTok,6);
+    $("cumRate").textContent = (sumPts>0) ? fmtRate(sumTok/sumPts) : "-";
+    $("lastTs").textContent = last ? last.timestamp : "-";
+
+    $("status").textContent = "완료";
+    $("status").className = "ok";
+  }
+
+  function initDefaults(){
+    // 기본: 최근 7일
+    const now = new Date();
+    const start = new Date(now.getTime() - 7*24*60*60*1000);
+    $("end").value = toLocalInputValue(now);
+    $("start").value = toLocalInputValue(start);
+  }
+
+  $("btn").addEventListener("click", async ()=>{
+    try{
+      $("status").className = "muted";
+      $("status").textContent = "불러오는 중...";
+      $("error").textContent = "";
+
+      const interval = $("interval").value;
+      let startMs = msFromLocalInput($("start").value);
+      let endMs = msFromLocalInput($("end").value);
+
+      // 사용자가 비워둔 경우: 최근 7일
+      if(!startMs || !endMs){
+        const now = new Date();
+        const start = new Date(now.getTime() - 7*24*60*60*1000);
+        startMs = start.getTime();
+        endMs = now.getTime();
+        $("start").value = toLocalInputValue(start);
+        $("end").value = toLocalInputValue(now);
+      }
+
+      const json = await fetchChart({ interval, startMs, endMs });
+      render(json);
+    }catch(e){
+      $("status").textContent = "에러";
+      $("status").className = "muted";
+      $("error").textContent = String(e?.message || e);
+      console.error(e);
+    }
+  });
+
+  initDefaults();
+</script>
+</body>
+</html>
