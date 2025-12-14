@@ -4,45 +4,83 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>River Pts → RIVER 전환 트래커</title>
+
   <style>
     :root{
       --bd:#e5e7eb; --muted:#6b7280; --bg:#f8fafc; --card:#ffffff; --txt:#111827;
       --good:#16a34a; --warn:#f59e0b; --bad:#ef4444;
     }
     *{box-sizing:border-box}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:0; padding:18px; background:var(--bg); color:var(--txt);}
+    body{
+      margin:0; padding:18px;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:var(--bg); color:var(--txt);
+    }
     .wrap{max-width:980px; margin:0 auto;}
     h1{margin:0; font-size:20px}
     .subtitle{margin-top:6px; font-size:13px; color:#4b5563}
 
-    .card{background:var(--card); border:1px solid var(--bd); border-radius:16px; padding:14px; margin:12px 0;}
+    .card{
+      background:var(--card);
+      border:1px solid var(--bd);
+      border-radius:16px;
+      padding:14px;
+      margin:12px 0;
+    }
+
     .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
     .btns{display:flex; gap:8px; flex-wrap:wrap}
 
     .chip{
-      border:1px solid var(--bd); padding:8px 10px; border-radius:999px;
-      font-size:12px; cursor:pointer; background:#fff;
+      border:1px solid var(--bd);
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:12px;
+      cursor:pointer;
+      background:#fff;
     }
-    .chip.active{border-color:#111827; box-shadow:0 0 0 2px rgba(17,24,39,.08)}
+    .chip.active{
+      border-color:#111827;
+      box-shadow:0 0 0 2px rgba(17,24,39,.08);
+    }
 
     .hint{font-size:12px; color:var(--muted)}
 
     .statusline{
-      display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
-      border:1px dashed var(--bd); border-radius:14px; padding:12px;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      border:1px dashed var(--bd);
+      border-radius:14px;
+      padding:12px;
     }
     .badge{
-      display:inline-flex; gap:8px; align-items:center;
-      border:1px solid var(--bd); border-radius:999px; padding:6px 10px;
-      font-size:12px; font-weight:900;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid var(--bd);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      font-weight:900;
     }
     .dot{width:10px; height:10px; border-radius:50%; background:#9ca3af}
     .good .dot{background:var(--good)}
     .warn .dot{background:var(--warn)}
     .bad  .dot{background:var(--bad)}
 
-    .kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:12px}
-    .kpi{border:1px solid var(--bd); border-radius:14px; padding:12px}
+    .kpis{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:10px;
+      margin-top:12px;
+    }
+    .kpi{
+      border:1px solid var(--bd);
+      border-radius:14px;
+      padding:12px;
+    }
     .k{font-size:11px; color:var(--muted)}
     .v{font-size:20px; font-weight:900}
     .small{font-size:12px; color:var(--muted)}
@@ -65,7 +103,7 @@
     신호등 + 회복속도(6h) + ETA 기반 의사결정 보조 도구
   </div>
 
-  <!-- Controls -->
+  <!-- 기간 프리셋 -->
   <div class="card">
     <label>기간 프리셋</label>
     <div class="hint">표시 기준: 4h · 분석 기준: 1h</div>
@@ -81,7 +119,7 @@
     </div>
   </div>
 
-  <!-- Status -->
+  <!-- 상태 -->
   <div class="card">
     <div class="statusline">
       <div class="badge" id="trafficBadge">
@@ -97,6 +135,7 @@
       <div class="kpi">
         <div class="k">최신 전환율</div>
         <div class="v" id="kpiRnow">-</div>
+        <div class="small" id="kpiRnow2">-</div>
       </div>
       <div class="kpi">
         <div class="k">회복속도 (6h)</div>
@@ -105,6 +144,7 @@
       <div class="kpi">
         <div class="k">ETA</div>
         <div class="v" id="kpiEta">-</div>
+        <div class="small" id="kpiEta2">-</div>
       </div>
       <div class="kpi">
         <div class="k">기간 누적 Tokens</div>
@@ -113,7 +153,7 @@
     </div>
   </div>
 
-  <!-- Table -->
+  <!-- 테이블 -->
   <div class="card">
     <table>
       <thead>
@@ -121,7 +161,7 @@
           <th>timestamp</th>
           <th>pts</th>
           <th>tokens</th>
-          <th>tokens/pts</th>
+          <th>tokens / pts</th>
         </tr>
       </thead>
       <tbody id="tbody">
@@ -130,18 +170,13 @@
     </table>
   </div>
 
-  <!-- Visitor counter -->
+  <!-- 방문자 수 -->
   <div style="margin:24px 0; text-align:center;">
     <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">
       누적 방문자 수
     </div>
     <img
-      src="https://hits.seeyoufarm.com/api/count/incr/badge.svg
-        ?url=https://kkkkaaaa-2025.github.io/river-conversion-calculator/
-        &count_bg=%23E5E7EB
-        &title_bg=%23111827
-        &title=visits
-        &edge_flat=true"
+      src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fkkkkaaaa-2025.github.io%2Friver-conversion-calculator%2F&count_bg=%23E5E7EB&title_bg=%23111827&title=visits&edge_flat=true"
       alt="visitor counter"
     />
   </div>
@@ -149,29 +184,96 @@
 </div>
 
 <script>
-/* 핵심 로직 요약:
-- R_base: 최근 7일 중앙값
-- 신호등: 85 / 70
-- slope: 1h 데이터 기준 최근 6h
-- ETA: GREEN(85%) / BASE(100%) 또는 RED(70%)
-*/
+/* ======================
+   핵심 계산 로직
+====================== */
 
-const WORKER = "https://rapid-violet-e93d.robotjh.workers.dev/s2/pts-conversion-chart";
+const API = "https://rapid-violet-e93d.robotjh.workers.dev/s2/pts-conversion-chart";
 const DISPLAY_INTERVAL = "4h";
 const ANALYSIS_INTERVAL = "1h";
 const GREEN = 0.85, RED = 0.70;
 
 const $ = id => document.getElementById(id);
 
-function badge(light){
+function setBadge(light){
   const b = $("trafficBadge");
   b.className = "badge " + (light==="GREEN"?"good":light==="YELLOW"?"warn":"bad");
   $("trafficText").textContent = light;
 }
 
-function load(){ /* 실제 로직은 기존 버전 그대로 유지 */ }
+function fetchData(interval, start, end){
+  const url = `${API}?interval=${interval}&startTime=${start}&endTime=${end}`;
+  return fetch(url).then(r=>r.json()).then(j=>j.data||[]);
+}
+
+function calcRate(r){
+  return r.ptsAmount > 0 ? r.tokensAmount / r.ptsAmount : NaN;
+}
+
+function human(h){
+  if(!isFinite(h)) return "-";
+  if(h<1) return Math.round(h*60)+"m";
+  if(h<24) return Math.round(h)+"h";
+  return Math.round(h/24)+"d";
+}
+
+async function load(){
+  const end = Date.now();
+  const start = end - 7*24*3600*1000;
+
+  const rows4h = await fetchData(DISPLAY_INTERVAL,start,end);
+  const rows1h = await fetchData(ANALYSIS_INTERVAL,start,end);
+
+  if(!rows4h.length) return;
+
+  // 최신 전환율
+  const last = rows4h[rows4h.length-1];
+  const rNow = calcRate(last);
+
+  // 기준 전환율 (7d 중앙값)
+  const rates = rows4h.map(calcRate).filter(isFinite).sort((a,b)=>a-b);
+  const rBase = rates[Math.floor(rates.length/2)];
+
+  // 신호등
+  const ratio = rNow / rBase;
+  const light = ratio>=GREEN?"GREEN":ratio>=RED?"YELLOW":"RED";
+  setBadge(light);
+
+  $("kpiRnow").textContent = rNow.toFixed(6);
+  $("kpiRnow2").textContent = `기준 대비 ${(ratio*100).toFixed(1)}%`;
+
+  // 회복속도 (6h)
+  const a = rows1h.slice(-6);
+  const slope = (calcRate(a[a.length-1]) - calcRate(a[0])) / 6;
+  $("kpiSlope").textContent = (slope>=0?"+":"")+slope.toFixed(6)+"/h";
+
+  // ETA
+  if(slope>0){
+    $("kpiEta").textContent =
+      `${human((GREEN*rBase-rNow)/slope)} / ${human((rBase-rNow)/slope)}`;
+    $("kpiEta2").textContent = "GREEN / BASE 도달 예상";
+  }else{
+    $("kpiEta").textContent = human((RED*rBase-rNow)/slope);
+    $("kpiEta2").textContent = "RED 진입 예상";
+  }
+
+  // 누적
+  const sumTok = rows4h.reduce((s,r)=>s+r.tokensAmount,0);
+  $("kpiTok").textContent = sumTok.toFixed(2);
+
+  // 테이블
+  $("tbody").innerHTML = rows4h.map(r=>`
+    <tr>
+      <td>${r.timestamp}</td>
+      <td>${r.ptsAmount}</td>
+      <td>${r.tokensAmount}</td>
+      <td>${calcRate(r).toFixed(6)}</td>
+    </tr>
+  `).join("");
+}
 
 $("btn").onclick = load;
+load();
 </script>
 </body>
 </html>
