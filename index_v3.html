@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>River Pts → RIVER 전환 트래커</title>
+  <style>
+    :root { --bd:#e5e7eb; --muted:#6b7280; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:0; padding:18px; background:#fff; color:#111827;}
+    h1{margin:0 0 8px; font-size:22px}
+    p{margin:0 0 14px; color:#4b5563; line-height:1.4}
+    .wrap{max-width:980px; margin:0 auto;}
+    .card{border:1px solid var(--bd); border-radius:14px; padding:14px; margin:12px 0; background:#fff;}
+    .row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end}
+    label{font-size:12px; color:#374151; display:block; margin:0 0 6px}
+    select,input,button{font-size:14px; padding:10px 12px; border:1px solid var(--bd); border-radius:10px; background:#fff}
+    input{min-width:220px}
+    button{cursor:pointer; font-weight:700}
+    button.primary{background:#111827; color:#fff; border-color:#111827}
+    .tip{font-size:12px; color:var(--muted); margin-top:8px}
+    .error{color:#b91c1c; font-weight:700; white-space:pre-wrap}
+    .kpi{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}
+    .kpi .item{border:1px solid var(--bd); border-radius:12px; padding:12px}
+    .k{font-size:12px; color:var(--muted)}
+    .v{font-size:18px; font-weight:800; margin-top:2px}
+    .small{font-size:12px; color:var(--muted); margin-top:4px}
+    table{width:100%; border-collapse:collapse; font-size:13px}
+    th,td{border-bottom:1px solid #eee; padding:8px; text-align:right; vertical-align:top}
+    th:first-child, td:first-child{text-align:left}
+    .footer{margin-top:10px; font-size:12px; color:var(--muted); word-break:break-all}
+    @media (max-width:720px){
+      .kpi{grid-template-columns:1fr}
+      input{min-width:0; width:100%}
+      select{width:100%}
+      .row{align-items:stretch}
+      button{width:100%}
+    }
+    code{background:#f3f4f6; padding:2px 6px; border-radius:6px}
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>River Pts → RIVER 전환 트래커</h1>
+    <p>
+      Cloudflare Worker 프록시를 통해 <code>api-airdrop.river.inc</code>의
+      <code>pts-conversion-chart</code> 데이터를 불러와 누적/비율 및 회복속도를 계산합니다.
+    </p>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>interval</label>
+          <select id="interval">
+            <option value="1h">1h</option>
+            <option value="4h" selected>4h</option>
+            <option value="1d">1d</option>
+          </select>
+        </div>
+
+        <div>
+          <label>start (로컬)</label>
+          <input id="start" type="datetime-local" />
+        </div>
+
+        <div>
+          <label>end (로컬)</label>
+          <input id="end" type="datetime-local" />
+        </div>
+
+        <div>
+          <button id="btn" class="primary">불러오기</button>
+        </div>
+      </div>
+
+      <div class="tip">
+        팁: start/end를 비우고 “불러오기”를 누르면 최근 7일을 자동 조회합니다.
+      </div>
+      <div id="err" class="error" style="display:none; margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="kpi">
+        <div class="item">
+          <div class="k">최근 구간 Actual / Expected (마지막 포인트)</div>
+          <div class="v" id="kpiRates">-</div>
+          <div class="small" id="kpiRates2">-</div>
+        </div>
+
+        <div class="item">
+          <div class="k">갭 (Actual - Expected)</div>
+          <div class="v" id="kpiGap">-</div>
+          <div class="small" id="kpiGap2">-</div>
+        </div>
+
+        <div class="item">
+          <div class="k">누적 Pts (기간 합)</div>
+          <div class="v" id="kpiPts">-</div>
+        </div>
+
+        <div class="item">
+          <div class="k">누적 Tokens (RIVER) (기간 합)</div>
+          <div class="v" id="kpiTok">-</div>
+        </div>
+
+        <div class="item">
+          <div class="k">누적 실현 환율 (누적 Tokens / 누적 Pts)</div>
+          <div class="v" id="kpiRealized">-</div>
+        </div>
+
+        <div class="item">
+          <div class="k">마지막 타임스탬프 (UTC)</div>
+          <div class="v" id="kpiLastTs">-</div>
+        </div>
+
+        <div class="item">
+          <div class="k">회복속도 (최근 6h) / 신호등</div>
+          <div class="v" id="kpiRecovery">-</div>
+          <div class="small" id="kpiRecovery2">-</div>
+        </div>
+      </div>
+
+      <div class="footer" id="debugLine"></div>
+      <div class="footer" id="debugLine2"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px; font-size:16px;">구간별 데이터 (ptsAmount / tokensAmount / rates)</h2>
+      <div style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>timestamp(UTC)</th>
+              <th>ptsAmount</th>
+              <th>tokensAmount</th>
+              <th>actualRate</th>
+              <th>expectedRate</th>
+              <th>tokens/pts</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="6" style="text-align:left; color:#6b7280;">-</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // 1) 본인 Worker 주소 (끝에 슬래시 X)
+  const WORKER_BASE = "https://rapid-violet-e93d.robotjh.workers.dev";
+
+  // 2) 프록시할 API 경로 (Worker allowlist 대상)
+  const API_PATH = "/s2/pts-conversion-chart";
+
+  const $ = (id) => document.getElementById(id);
+
+  function toLocalInputValue(d) {
+    const pad = (n) => String(n).padStart(2,"0");
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth()+1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
+  function parseLocalInputToMs(v) {
+    const d = new Date(v); // datetime-local은 로컬 시간으로 해석
+    const ms = d.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  function fmtNum(x, digits=2) {
+    if (!Number.isFinite(x)) return "-";
+    return x.toLocaleString(undefined, { maximumFractionDigits: digits });
+  }
+
+  function fmtRate(x) {
+    if (!Number.isFinite(x)) return "-";
+    return x.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 8 });
+  }
+
+  function showError(msg) {
+    const el = $("err");
+    el.style.display = "block";
+    el.textContent = msg;
+  }
+
+  function clearError() {
+    const el = $("err");
+    el.style.display = "none";
+    el.textContent = "";
+  }
+
+  // 안전한 방식: path 파라미터 없이, URL path로 직접 호출
+  function buildWorkerUrl({ interval, startMs, endMs }) {
+    const u = new URL(WORKER_BASE + API_PATH);
+    u.searchParams.set("interval", interval);
+    u.searchParams.set("startTime", String(startMs));
+    u.searchParams.set("endTime", String(endMs));
+    return u.toString();
+  }
+
+  function setLoading(isLoading) {
+    const btn = $("btn");
+    btn.disabled = isLoading;
+    btn.textContent = isLoading ? "불러오는 중..." : "불러오기";
+  }
+
+  function parseTsMs(ts) {
+    const ms = Date.parse(ts);
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  function safeRateFromRow(r) {
+    const p = Number(r?.ptsAmount);
+    const t = Number(r?.tokensAmount);
+    if (Number.isFinite(p) && p > 0 && Number.isFinite(t)) return t / p;
+    const ar = Number(r?.actualRate);
+    return Number.isFinite(ar) ? ar : NaN;
+  }
+
+  function median(arr) {
+    const a = arr.filter(Number.isFinite).slice().sort((x,y)=>x-y);
+    if (!a.length) return NaN;
+    const mid = Math.floor(a.length / 2);
+    return (a.length % 2) ? a[mid] : (a[mid-1] + a[mid]) / 2;
+  }
+
+  function labelTrafficLight(rNow, rBase) {
+    if (!Number.isFinite(rNow) || !Number.isFinite(rBase) || rBase <= 0) return "-";
+    const ratio = rNow / rBase;
+    if (ratio >= 0.90) return "GREEN";
+    if (ratio >= 0.80) return "YELLOW";
+    return "RED";
+  }
+
+  // 최근 lookbackHours 동안의 기울기(시간당 변화량)
+  function recoverySlopePerHour(rows, lookbackHours = 6) {
+    if (!rows?.length) return NaN;
+
+    // 마지막 유효 rate 인덱스
+    let lastIdx = -1;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = safeRateFromRow(rows[i]);
+      if (Number.isFinite(r)) { lastIdx = i; break; }
+    }
+    if (lastIdx < 0) return NaN;
+
+    const lastMs = parseTsMs(rows[lastIdx].timestamp);
+    const rNow = safeRateFromRow(rows[lastIdx]);
+    if (!lastMs || !Number.isFinite(rNow)) return NaN;
+
+    const targetMs = lastMs - lookbackHours * 3600 * 1000;
+
+    let prevIdx = -1;
+    for (let i = lastIdx; i >= 0; i--) {
+      const ms = parseTsMs(rows[i].timestamp);
+      if (!ms) continue;
+      if (ms <= targetMs) {
+        const r = safeRateFromRow(rows[i]);
+        if (Number.isFinite(r)) { prevIdx = i; break; }
+      }
+    }
+
+    // lookback 지점이 없으면 직전 값으로라도 계산
+    if (prevIdx < 0) {
+      for (let i = lastIdx - 1; i >= 0; i--) {
+        const r = safeRateFromRow(rows[i]);
+        if (Number.isFinite(r)) { prevIdx = i; break; }
+      }
+    }
+    if (prevIdx < 0) return NaN;
+
+    const prevMs = parseTsMs(rows[prevIdx].timestamp);
+    const rPrev = safeRateFromRow(rows[prevIdx]);
+    if (!prevMs || !Number.isFinite(rPrev)) return NaN;
+
+    const dtHours = (lastMs - prevMs) / (3600 * 1000);
+    if (!(dtHours > 0)) return NaN;
+
+    return (rNow - rPrev) / dtHours;
+  }
+
+  async function fetchRBase7dMedian(intervalForBase = "4h") {
+    const now = Date.now();
+    const endMs = now;
+    const startMs = endMs - 7 * 24 * 60 * 60 * 1000;
+
+    const url = buildWorkerUrl({ interval: intervalForBase, startMs, endMs });
+    const res = await fetch(url, { method: "GET", headers: { "accept": "application/json" } });
+    if (!res.ok) return NaN;
+
+    const payload = await res.json();
+    const rows = payload?.data ?? [];
+    const rates = rows.map(safeRateFromRow).filter(Number.isFinite);
+    return median(rates);
+  }
+
+  function renderTable(rows) {
+    const tb = $("tbody");
+    if (!rows || rows.length === 0) {
+      tb.innerHTML = `<tr><td colspan="6" style="text-align:left; color:#6b7280;">데이터 없음</td></tr>`;
+      return;
+    }
+
+    tb.innerHTML = rows.map(r => {
+      const p = Number(r.ptsAmount);
+      const t = Number(r.tokensAmount);
+      const tp = (Number.isFinite(p) && p > 0 && Number.isFinite(t)) ? (t / p) : NaN;
+
+      return `
+        <tr>
+          <td>${r.timestamp ?? ""}</td>
+          <td>${fmtNum(p, 2)}</td>
+          <td>${fmtNum(t, 6)}</td>
+          <td>${fmtRate(Number(r.actualRate))}</td>
+          <td>${fmtRate(Number(r.expectedRate))}</td>
+          <td>${fmtRate(tp)}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function computeAndRender(payload, requestUrl, intervalUsed, startMs, endMs) {
+    const rows = payload?.data ?? [];
+    renderTable(rows);
+
+    // 누적(기간 합) - ptsAmount/tokensAmount가 delta임을 전제로
+    let sumPts = 0;
+    let sumTok = 0;
+    for (const r of rows) {
+      const p = Number(r.ptsAmount);
+      const t = Number(r.tokensAmount);
+      if (Number.isFinite(p)) sumPts += p;
+      if (Number.isFinite(t)) sumTok += t;
+    }
+    const realized = (sumPts > 0) ? (sumTok / sumPts) : NaN;
+
+    // 마지막 포인트
+    const last = rows.length ? rows[rows.length - 1] : null;
+    const lastA = last ? Number(last.actualRate) : NaN;
+    const lastE = last ? Number(last.expectedRate) : NaN;
+    const gap = (Number.isFinite(lastA) && Number.isFinite(lastE)) ? (lastA - lastE) : NaN;
+
+    $("kpiRates").textContent = `${fmtRate(lastA)} / ${fmtRate(lastE)}`;
+    $("kpiRates2").textContent = last?.timestamp ? `last = ${last.timestamp}` : "-";
+
+    $("kpiGap").textContent = Number.isFinite(gap) ? fmtRate(gap) : "-";
+    $("kpiGap2").textContent = (Number.isFinite(gap) && Number.isFinite(lastE) && lastE !== 0)
+      ? `gap% = ${(gap/lastE*100).toFixed(2)}%`
+      : "-";
+
+    $("kpiPts").textContent = fmtNum(sumPts, 2);
+    $("kpiTok").textContent = fmtNum(sumTok, 6);
+    $("kpiRealized").textContent = fmtRate(realized);
+    $("kpiLastTs").textContent = last?.timestamp ?? "-";
+
+    $("debugLine").textContent = `요청: ${requestUrl}`;
+
+    // 회복속도 / 신호등
+    try {
+      const rNow = rows.length ? safeRateFromRow(rows[rows.length - 1]) : NaN;
+
+      // 기준은 7일 중앙값 (4h 기준 권장)
+      const rBase = await fetchRBase7dMedian("4h");
+
+      // 회복속도: 최근 6h 기울기 (interval=1h면 가장 정확)
+      const slope = recoverySlopePerHour(rows, 6);
+      const light = labelTrafficLight(rNow, rBase);
+
+      const slopeText = Number.isFinite(slope)
+        ? `${slope >= 0 ? "+" : ""}${fmtRate(slope)} / hr`
+        : "-";
+
+      $("kpiRecovery").textContent = `${slopeText}  ·  ${light}`;
+      $("kpiRecovery2").textContent =
+        `R_now=${fmtRate(rNow)} · R_base(7d median@4h)=${fmtRate(rBase)} · R_now/R_base=${
+          (Number.isFinite(rNow) && Number.isFinite(rBase) && rBase > 0)
+            ? (rNow/rBase*100).toFixed(1) + "%"
+            : "-"
+        }`;
+
+      // 디버그용: 기준 산출 요청도 표시
+      $("debugLine2").textContent =
+        `계산: interval=${intervalUsed}, range=${new Date(startMs).toISOString()} ~ ${new Date(endMs).toISOString()} (local inputs)`;
+
+    } catch (e) {
+      $("kpiRecovery").textContent = "-";
+      $("kpiRecovery2").textContent = "회복속도 계산 오류";
+      $("debugLine2").textContent = "";
+    }
+  }
+
+  async function load() {
+    clearError();
+    setLoading(true);
+
+    try {
+      const interval = $("interval").value;
+
+      // start/end 비어 있으면 최근 7일 자동
+      let startMs = parseLocalInputToMs($("start").value);
+      let endMs = parseLocalInputToMs($("end").value);
+
+      const now = Date.now();
+      if (!endMs) endMs = now;
+      if (!startMs) startMs = endMs - 7 * 24 * 60 * 60 * 1000;
+
+      if (startMs >= endMs) {
+        throw new Error("start가 end보다 같거나 이후입니다. 시간을 다시 선택하세요.");
+      }
+
+      const url = buildWorkerUrl({ interval, startMs, endMs });
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "accept": "application/json" },
+        cache: "no-store"
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}\n${txt}`);
+      }
+
+      const payload = await res.json();
+      await computeAndRender(payload, url, interval, startMs, endMs);
+
+    } catch (e) {
+      showError(String(e?.message || e));
+      // KPI/테이블 초기화는 하지 않음(마지막 성공값 유지)
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 초기값: 최근 7일 범위 세팅(로컬)
+  (function init(){
+    const end = new Date();
+    const start = new Date(end.getTime() - 7*24*60*60*1000);
+    $("start").value = toLocalInputValue(start);
+    $("end").value = toLocalInputValue(end);
+    $("btn").addEventListener("click", load);
+  })();
+</script>
+</body>
+</html>
