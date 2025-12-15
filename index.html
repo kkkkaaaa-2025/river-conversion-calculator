@@ -52,7 +52,7 @@
       border:1px solid var(--bd); border-radius:14px; padding:12px; background:#fff;
       display:flex; flex-direction:column; gap:6px;
     }
-    /* (추가) KPI 색상 단계 */
+    /* KPI 색상 단계 */
     .kpi.good{border-color:rgba(22,163,74,.55); box-shadow:0 0 0 2px rgba(22,163,74,.08)}
     .kpi.warn{border-color:rgba(245,158,11,.55); box-shadow:0 0 0 2px rgba(245,158,11,.08)}
     .kpi.bad {border-color:rgba(239,68,68,.55); box-shadow:0 0 0 2px rgba(239,68,68,.08)}
@@ -126,6 +126,15 @@
     <div id="err" class="error"></div>
   </div>
 
+  <!-- (이동) 기대 대비 갭 KPI : 최상단 카드 -->
+  <div class="card">
+    <div class="kpi" id="kpiGapBox">
+      <div class="k">기대 대비 갭(%)</div>
+      <div class="v" id="kpiGap">-</div>
+      <div class="small" id="kpiGap2">-</div>
+    </div>
+  </div>
+
   <!-- Status + KPIs -->
   <div class="card">
     <div class="statusline">
@@ -135,7 +144,7 @@
           <span id="trafficText">-</span>
         </div>
         <div class="small" style="margin-top:8px" id="signalHelp">
-          조건: GREEN ≥ 85% · YELLOW 70~85% · RED &lt; 70% (최신 전환율 / 기준 전환율)
+          조건: GREEN ≥ 85% · YELLOW 70~85% · RED &lt; 70% (최근 7d 기준 상대적: 최신 전환율 / 기준 전환율)
         </div>
       </div>
 
@@ -167,13 +176,6 @@
         <div class="k">기간 누적 Pts / Tokens</div>
         <div class="v" id="kpiCum">-</div>
         <div class="small" id="kpiCum2">-</div>
-      </div>
-
-      <!-- (추가) 기대 대비 갭 KPI -->
-      <div class="kpi" id="kpiGapBox">
-        <div class="k">기대 대비 갭(%)</div>
-        <div class="v" id="kpiGap">-</div>
-        <div class="small" id="kpiGap2">-</div>
       </div>
     </div>
   </div>
@@ -216,7 +218,7 @@
   const RED_RATIO   = 0.70; // RED 진입(=ETA 악화 목표)
   const BASE_RATIO  = 1.00; // 기준 완전 도달
 
-  // (추가) 갭 색상 단계: 초:-10 이상 / 노:-30~-10 / 빨:-30 아래
+  // 갭 색상 단계: 초:-10 이상 / 노:-30~-10 / 빨:-30 아래
   const GAP_GREEN = -10;
   const GAP_YELLOW = -30;
 
@@ -300,12 +302,9 @@
 
   // ---------- stats ----------
   function safeRateFromRow(r) {
-    // (주의) r.actualRate와 tokens/pts는 거의 같지만,
-    // 실제 사용자가 체감하는 값은 tokens/pts(=실현 전환율)이므로 우선 사용.
     const p = Number(r?.ptsAmount);
     const t = Number(r?.tokensAmount);
     if (Number.isFinite(p) && p > 0 && Number.isFinite(t)) return t / p;
-
     const ar = Number(r?.actualRate);
     return Number.isFinite(ar) ? ar : NaN;
   }
@@ -317,7 +316,6 @@
     return (a.length % 2) ? a[mid] : (a[mid-1] + a[mid]) / 2;
   }
 
-  // 신호등(0.85 / 0.70)
   function labelTrafficLight(rNow, rBase) {
     if (!Number.isFinite(rNow) || !Number.isFinite(rBase) || rBase <= 0) return "-";
     const ratio = rNow / rBase;
@@ -410,7 +408,6 @@
     document.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.preset === preset));
 
     currentPresetLabel = preset;
-    // 신호등 문구를 더 명확하게 표시(프리셋 기준 상대적)
     $("signalHelp").textContent =
       `조건: GREEN ≥ 85% · YELLOW 70~85% · RED < 70% (최근 ${currentPresetLabel} 기준 상대적: 최신 전환율 / 기준 전환율)`;
   }
@@ -430,7 +427,7 @@
     return `${s >= 0 ? "+" : ""}${fmtRate(s)} / hr`;
   }
 
-  // (추가) 갭 KPI 색상 반영
+  // 갭 KPI 색상 반영
   function setGapBoxClass(gapPct){
     const box = $("kpiGapBox");
     box.classList.remove("good","warn","bad");
@@ -454,11 +451,11 @@
 
       if (startMs >= endMs) throw new Error("start가 end보다 같거나 이후입니다.");
 
-      // 1) 표시용(4h) - 테이블/누적/최신
+      // 1) 표시용(4h)
       const rowsDisplay = await fetchRows(DISPLAY_INTERVAL, startMs, endMs);
       renderTable(rowsDisplay);
 
-      // 2) 분석용(1h) - slope/ETA
+      // 2) 분석용(1h)
       const rowsAnalysis = await fetchRows(ANALYSIS_INTERVAL, startMs, endMs);
 
       // sums (표시 4h)
@@ -474,12 +471,24 @@
       const last = rowsDisplay.length ? rowsDisplay[rowsDisplay.length - 1] : null;
       const rNow = last ? safeRateFromRow(last) : NaN;
 
-      // (중요 변경) 기준선 rBase = 현재 선택 기간(프리셋/직접 지정) 내 "실현 전환율" 중앙값
+      // 기준선 rBase = 선택 기간 내 중앙값
       const ratesInRange = rowsDisplay.map(safeRateFromRow).filter(Number.isFinite);
       const rBase = median(ratesInRange);
 
       // slope (분석 1h)
       const slope = recoverySlopePerHour(rowsAnalysis, SLOPE_LOOKBACK_HOURS);
+
+      // 기대 대비 갭(%): (실현 - 기대)/기대
+      const expectedNow = Number(last?.expectedRate);
+      const gapPct = (Number.isFinite(rNow) && Number.isFinite(expectedNow) && expectedNow > 0)
+        ? ((rNow - expectedNow) / expectedNow) * 100
+        : NaN;
+
+      $("kpiGap").textContent = Number.isFinite(gapPct) ? `${gapPct.toFixed(1)}%` : "-";
+      $("kpiGap2").textContent = Number.isFinite(expectedNow)
+        ? `기대 전환율=${fmtRate(expectedNow)} · (실현-기대)/기대`
+        : "기대 전환율 대비 갭";
+      setGapBoxClass(gapPct);
 
       // 신호등
       const light = labelTrafficLight(rNow, rBase);
@@ -489,9 +498,9 @@
       const ratioText = Number.isFinite(ratio) ? (ratio * 100).toFixed(1) + "%" : "-";
 
       // ETA targets (신호등과 일치)
-      const tGreen = Number.isFinite(rBase) ? (GREEN_RATIO * rBase) : NaN; // 85% (GREEN)
-      const tRed   = Number.isFinite(rBase) ? (RED_RATIO   * rBase) : NaN; // 70% (RED)
-      const tBase  = Number.isFinite(rBase) ? (BASE_RATIO  * rBase) : NaN; // 100%
+      const tGreen = Number.isFinite(rBase) ? (GREEN_RATIO * rBase) : NaN;
+      const tRed   = Number.isFinite(rBase) ? (RED_RATIO   * rBase) : NaN;
+      const tBase  = Number.isFinite(rBase) ? (BASE_RATIO  * rBase) : NaN;
 
       // KPI: 최신 전환율
       $("kpiRnow").textContent = fmtRate(rNow);
@@ -503,12 +512,11 @@
       $("kpiSlope").textContent = slopeText(slope);
       $("kpiSlope2").textContent = `lookback=${SLOPE_LOOKBACK_HOURS}h (1h 데이터 기준)`;
 
-      // KPI: ETA (신호등 목표로 통일)
+      // KPI: ETA
       if (!Number.isFinite(slope) || slope === 0 || !Number.isFinite(rNow) || !Number.isFinite(rBase)) {
         $("kpiEta").textContent = "-";
         $("kpiEta2").textContent = "ETA 계산 불가 (데이터/기울기 부족)";
       } else if (slope > 0) {
-        // 회복: GREEN(85%) / BASE(100%)
         let etaGreen = (tGreen - rNow) / slope;
         let etaBase  = (tBase  - rNow) / slope;
         if (Number.isFinite(etaGreen) && etaGreen < 0) etaGreen = 0;
@@ -517,8 +525,7 @@
         $("kpiEta").textContent = `${humanizeHours(etaGreen)} / ${humanizeHours(etaBase)}`;
         $("kpiEta2").textContent = "회복 ETA: GREEN(85%) / BASE(100%) (선형 추정)";
       } else {
-        // 악화: RED(70%) 도달 예상
-        let etaRed = (tRed - rNow) / slope; // slope<0일 때, tRed < rNow면 양수
+        let etaRed = (tRed - rNow) / slope;
         if (Number.isFinite(etaRed) && etaRed < 0) etaRed = NaN;
 
         $("kpiEta").textContent = humanizeHours(etaRed);
@@ -528,20 +535,6 @@
       // KPI: 누적
       $("kpiCum").textContent = `${fmtNum(sumPts,2)} / ${fmtNum(sumTok,6)}`;
       $("kpiCum2").textContent = "Pts / Tokens (선택 기간 합)";
-
-      // (추가) KPI: 기대 대비 갭(%)
-      // gap% = (실현 - 기대) / 기대 * 100
-      const expectedNow = Number(last?.expectedRate);
-      const gapPct = (Number.isFinite(rNow) && Number.isFinite(expectedNow) && expectedNow > 0)
-        ? ((rNow - expectedNow) / expectedNow) * 100
-        : NaN;
-
-      $("kpiGap").textContent = Number.isFinite(gapPct) ? `${gapPct.toFixed(1)}%` : "-";
-      $("kpiGap2").textContent = Number.isFinite(expectedNow)
-        ? `기대 전환율=${fmtRate(expectedNow)} · (실현-기대)/기대`
-        : "기대 전환율 대비 갭";
-
-      setGapBoxClass(gapPct);
 
       $("statusText").textContent =
         `상태=${light} (최근 ${currentPresetLabel} 상대, ratio=${ratioText}) · slope=${slopeText(slope)} · gap=${Number.isFinite(gapPct)?gapPct.toFixed(1)+"%":"-"}`;
