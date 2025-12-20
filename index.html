@@ -1,4 +1,4 @@
-    <!doctype html>
+ <!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
@@ -31,7 +31,7 @@
     .hint{font-size:12px; color:var(--muted)}
     .error{color:#b91c1c; font-weight:700; white-space:pre-wrap; margin-top:10px; display:none}
 
-    /* Status */
+    /* Status (상대 신호등) */
     .statusline{
       display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;
       padding:12px; border:1px dashed var(--bd); border-radius:14px; background:#fff;
@@ -56,6 +56,42 @@
     .v{font-size:20px; font-weight:900; letter-spacing:-0.2px}
     .small{font-size:12px; color:var(--muted); line-height:1.35}
 
+    /* GAP KPI: 테두리 색 + 큰 숫자 */
+    .kpi-gap { border-width:2px; }
+    .kpi-gap.good { border-color: var(--good); }
+    .kpi-gap.warn { border-color: var(--warn); }
+    .kpi-gap.bad  { border-color: var(--bad); }
+    .kpi-gap .v { font-size:28px; }
+
+    /* 설명 콜아웃(명확한 UI 문구) */
+    .callout{
+      margin-top:8px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--bd);
+      background:#fafafa;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+    .callout .tag{
+      font-size:11px;
+      font-weight:900;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--bd);
+      background:#fff;
+      white-space:nowrap;
+    }
+    .callout.good { border-color: rgba(22,163,74,.35); background: rgba(22,163,74,.06); }
+    .callout.warn { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.06); }
+    .callout.bad  { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.06); }
+    .callout.good .tag{ border-color: rgba(22,163,74,.45); }
+    .callout.warn .tag{ border-color: rgba(245,158,11,.45); }
+    .callout.bad  .tag{ border-color: rgba(239,68,68,.45); }
+    .callout .msg{font-size:12px; color:#374151; line-height:1.45}
+
     details{border:1px solid var(--bd); border-radius:14px; background:#fff; padding:10px 12px}
     summary{cursor:pointer; font-weight:900; font-size:13px}
     table{width:100%; border-collapse:collapse; font-size:13px; margin-top:10px}
@@ -77,7 +113,7 @@
     <div>
       <h1>River Pts → RIVER 전환 트래커</h1>
       <div class="subtitle">
-        기대 대비 갭(전환율) + 신호등(최근7일 상대) + 회복속도(6h) + ETA로 “지금 분위기”를 빠르게 판단합니다.
+        위: 기대 대비 갭(절대) · 아래: 최근 7일 대비 신호등(상대) + 회복속도(6h) + ETA
       </div>
     </div>
   </div>
@@ -121,53 +157,52 @@
     <div id="err" class="error"></div>
   </div>
 
-  <!-- KPIs + Status -->
+  <!-- KPIs (위에 GAP 먼저) -->
   <div class="card">
-
-    <!-- 0) 갭(기대 대비) - 가장 위 -->
-    <div class="statusline" style="margin-bottom:12px">
-      <div>
-        <div class="badge" id="gapBadge">
-          <span class="dot"></span>
-          <span id="gapText">-</span>
-        </div>
-        <div class="small" style="margin-top:8px">
-          갭 기준(기대 대비): 초 ≥ -10% · 노 -30% ~ -10% · 빨 &lt; -30%  (actualRate / expectedRate)
-        </div>
-      </div>
-      <div class="hint">
-        <div class="mono" id="gapDetail">-</div>
-      </div>
-    </div>
-
-    <!-- 1) 기존 상대 신호등 (최근 7일 기준) -->
-    <div class="statusline">
-      <div>
-        <div class="badge" id="trafficBadge">
-          <span class="dot"></span>
-          <span id="trafficText">-</span>
-        </div>
-        <div class="small" style="margin-top:8px">
-          신호등(최근 7일 상대): GREEN ≥ 85% · YELLOW 70~85% · RED &lt; 70% (최신 전환율 / 최근 7일 기준 전환율)
-        </div>
-      </div>
-
-      <div class="hint">
-        <div class="mono" id="statusText">-</div>
-      </div>
-    </div>
-
     <div class="kpis">
-      <div class="kpi">
-        <div class="k">최신 전환율 (actualRate)</div>
-        <div class="v" id="kpiActual">-</div>
-        <div class="small" id="kpiActual2">-</div>
+      <!-- GAP: 기대 대비(절대) -->
+      <div class="kpi kpi-gap" id="gapCard" style="grid-column:1 / -1;">
+        <div class="k">기대 대비 갭(절대): actualRate / expectedRate</div>
+        <div class="v" id="gapValue">-</div>
+        <div class="small" id="gapDetail">-</div>
+        <div class="callout" id="gapCallout">
+          <div class="tag">해석(절대)</div>
+          <div class="msg" id="gapMsg">-</div>
+        </div>
+        <div class="small" style="margin-top:6px">
+          갭 단계: 초 ≥ -10% · 노 -30% ~ -10% · 빨 &lt; -30%
+        </div>
+      </div>
+
+      <!-- 상대 신호등 -->
+      <div class="kpi" style="grid-column:1 / -1;">
+        <div class="statusline">
+          <div>
+            <div class="badge" id="trafficBadge">
+              <span class="dot"></span>
+              <span id="trafficText">-</span>
+            </div>
+            <div class="small" style="margin-top:8px">
+              신호등(최근 7일 상대): GREEN ≥ 85% · YELLOW 70~85% · RED &lt; 70%
+              (최신 전환율 / 최근 7일 기준 전환율)
+            </div>
+
+            <div class="callout" id="relCallout" style="margin-top:10px;">
+              <div class="tag">해석(상대)</div>
+              <div class="msg" id="relMsg">-</div>
+            </div>
+          </div>
+
+          <div class="hint">
+            <div class="mono" id="statusText">-</div>
+          </div>
+        </div>
       </div>
 
       <div class="kpi">
-        <div class="k">기대 전환율(기대캡, expectedRate)</div>
-        <div class="v" id="kpiExpected">-</div>
-        <div class="small" id="kpiExpected2">-</div>
+        <div class="k">R_now (최신 전환율)</div>
+        <div class="v" id="kpiRnow">-</div>
+        <div class="small" id="kpiRnow2">-</div>
       </div>
 
       <div class="kpi">
@@ -181,10 +216,16 @@
         <div class="v" id="kpiEta">-</div>
         <div class="small" id="kpiEta2">-</div>
       </div>
+
+      <div class="kpi">
+        <div class="k">기간 누적 Pts / Tokens</div>
+        <div class="v" id="kpiCum">-</div>
+        <div class="small" id="kpiCum2">-</div>
+      </div>
     </div>
   </div>
 
-  <!-- Details -->
+  <!-- Details: table only -->
   <details class="card">
     <summary>상세 데이터 보기 (테이블)</summary>
     <div style="overflow:auto; margin-top:10px">
@@ -213,30 +254,30 @@
   const API_PATH = "/s2/pts-conversion-chart";
 
   // 고정 규칙
-  const DISPLAY_INTERVAL = "4h";  // 최신 값 + 테이블
+  const DISPLAY_INTERVAL = "4h";  // 최신 전환율 + 테이블 + actual/expected
   const ANALYSIS_INTERVAL = "1h"; // 회복속도 + ETA
   const SLOPE_LOOKBACK_HOURS = 6;
 
-  // (상대) 신호등 기준: rNow / rBase
+  // 상대 신호등 기준(최근 7일 대비)
   const GREEN_RATIO = 0.85;
   const RED_RATIO   = 0.70;
   const BASE_RATIO  = 1.00;
 
-  // (절대) 갭 신호등 기준: actual vs expected
-  // gap% = (actual/expected - 1) * 100
-  const GAP_GREEN_MIN = -10;  // 초: -10% 이상
-  const GAP_YELLOW_MIN = -30; // 노: -30 ~ -10
+  // 기대 대비 갭(절대) 기준: gap% = (actual/expected - 1) * 100
+  // 초 >= -10, 노 [-30, -10), 빨 < -30
+  const GAP_GREEN_MIN = -10;
+  const GAP_YELLOW_MIN = -30;
 
   const $ = (id) => document.getElementById(id);
 
   // ---------- formatting ----------
+  function fmtNum(x, digits=2) {
+    if (!Number.isFinite(x)) return "-";
+    return x.toLocaleString(undefined, { maximumFractionDigits: digits });
+  }
   function fmtRate(x) {
     if (!Number.isFinite(x)) return "-";
     return x.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 8 });
-  }
-  function fmtPct(x, digits=1) {
-    if (!Number.isFinite(x)) return "-";
-    return `${x.toFixed(digits)}%`;
   }
   function toLocalInputValue(d) {
     const pad = (n) => String(n).padStart(2,"0");
@@ -301,21 +342,23 @@
     return payload?.data ?? [];
   }
 
-  // ---------- helpers ----------
-  function safeTokensPerPts(r) {
+  // ---------- stats ----------
+  function safeRateFromRow(r) {
+    // tokens/pts 기반
     const p = Number(r?.ptsAmount);
     const t = Number(r?.tokensAmount);
     if (Number.isFinite(p) && p > 0 && Number.isFinite(t)) return t / p;
-    return NaN;
-  }
-
-  function safeActualRate(r) {
+    // fallback actualRate
     const ar = Number(r?.actualRate);
-    if (Number.isFinite(ar)) return ar;
-    return safeTokensPerPts(r);
+    return Number.isFinite(ar) ? ar : NaN;
   }
 
-  function safeExpectedRate(r) {
+  function safeActualRate(r){
+    const ar = Number(r?.actualRate);
+    return Number.isFinite(ar) ? ar : safeRateFromRow(r);
+  }
+
+  function safeExpectedRate(r){
     const er = Number(r?.expectedRate);
     return Number.isFinite(er) ? er : NaN;
   }
@@ -327,7 +370,7 @@
     return (a.length % 2) ? a[mid] : (a[mid-1] + a[mid]) / 2;
   }
 
-  // (상대) 신호등: 최신 전환율 / 최근7일 기준 전환율
+  // 상대 신호등 (rNow / rBase)
   function labelTrafficLight(rNow, rBase) {
     if (!Number.isFinite(rNow) || !Number.isFinite(rBase) || rBase <= 0) return "-";
     const ratio = rNow / rBase;
@@ -336,8 +379,12 @@
     return "RED";
   }
 
-  // (절대) 갭 신호등: actual vs expected
-  function labelGapLight(gapPct) {
+  // 기대 대비 갭 단계 (actual/expected)
+  function gapPctFromRates(actual, expected){
+    if (!Number.isFinite(actual) || !Number.isFinite(expected) || expected <= 0) return NaN;
+    return (actual / expected - 1) * 100;
+  }
+  function labelGapLight(gapPct){
     if (!Number.isFinite(gapPct)) return "-";
     if (gapPct >= GAP_GREEN_MIN) return "초";
     if (gapPct >= GAP_YELLOW_MIN) return "노";
@@ -349,13 +396,13 @@
 
     let lastIdx = -1;
     for (let i = rows.length - 1; i >= 0; i--) {
-      const r = safeActualRate(rows[i]);
+      const r = safeRateFromRow(rows[i]);
       if (Number.isFinite(r)) { lastIdx = i; break; }
     }
     if (lastIdx < 0) return NaN;
 
     const lastMs = parseTsMs(rows[lastIdx].timestamp);
-    const rNow = safeActualRate(rows[lastIdx]);
+    const rNow = safeRateFromRow(rows[lastIdx]);
     if (!lastMs || !Number.isFinite(rNow)) return NaN;
 
     const targetMs = lastMs - lookbackHours * 3600 * 1000;
@@ -365,20 +412,20 @@
       const ms = parseTsMs(rows[i].timestamp);
       if (!ms) continue;
       if (ms <= targetMs) {
-        const r = safeActualRate(rows[i]);
+        const r = safeRateFromRow(rows[i]);
         if (Number.isFinite(r)) { prevIdx = i; break; }
       }
     }
     if (prevIdx < 0) {
       for (let i = lastIdx - 1; i >= 0; i--) {
-        const r = safeActualRate(rows[i]);
+        const r = safeRateFromRow(rows[i]);
         if (Number.isFinite(r)) { prevIdx = i; break; }
       }
     }
     if (prevIdx < 0) return NaN;
 
     const prevMs = parseTsMs(rows[prevIdx].timestamp);
-    const rPrev = safeActualRate(rows[prevIdx]);
+    const rPrev = safeRateFromRow(rows[prevIdx]);
     if (!prevMs || !Number.isFinite(rPrev)) return NaN;
 
     const dtHours = (lastMs - prevMs) / (3600 * 1000);
@@ -392,7 +439,7 @@
     const endMs = now;
     const startMs = endMs - 7 * 24 * 60 * 60 * 1000;
     const rows = await fetchRows(DISPLAY_INTERVAL, startMs, endMs);
-    const rates = rows.map(safeActualRate).filter(Number.isFinite);
+    const rates = rows.map(safeRateFromRow).filter(Number.isFinite);
     return median(rates);
   }
 
@@ -403,12 +450,14 @@
       return;
     }
     tb.innerHTML = rows.map(r => {
-      const tp = safeTokensPerPts(r);
+      const p = Number(r.ptsAmount);
+      const t = Number(r.tokensAmount);
+      const tp = (Number.isFinite(p) && p > 0 && Number.isFinite(t)) ? (t / p) : NaN;
       return `
         <tr>
           <td>${r.timestamp ?? ""}</td>
-          <td>${Number(r.ptsAmount).toLocaleString()}</td>
-          <td>${Number(r.tokensAmount).toLocaleString()}</td>
+          <td>${fmtNum(p, 2)}</td>
+          <td>${fmtNum(t, 6)}</td>
           <td>${fmtRate(Number(r.actualRate))}</td>
           <td>${fmtRate(Number(r.expectedRate))}</td>
           <td>${fmtRate(tp)}</td>
@@ -435,14 +484,19 @@
     document.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.preset === preset));
   }
 
-  // ---------- badges ----------
-  function setBadge(elId, textId, light) {
-    const badge = $(elId);
+  // ---------- badges / callouts ----------
+  function setTrafficBadge(light) {
+    const badge = $("trafficBadge");
     badge.classList.remove("good","warn","bad");
-    if (light === "GREEN" || light === "초") badge.classList.add("good");
-    else if (light === "YELLOW" || light === "노") badge.classList.add("warn");
-    else if (light === "RED" || light === "빨") badge.classList.add("bad");
-    $(textId).textContent = light;
+    if (light === "GREEN") badge.classList.add("good");
+    else if (light === "YELLOW") badge.classList.add("warn");
+    else if (light === "RED") badge.classList.add("bad");
+    $("trafficText").textContent = light;
+  }
+
+  function setCallout(el, mode){ // mode: good|warn|bad
+    el.classList.remove("good","warn","bad");
+    if (mode) el.classList.add(mode);
   }
 
   function slopeText(s) {
@@ -461,75 +515,131 @@
       const now = Date.now();
       if (!endMs) endMs = now;
       if (!startMs) startMs = endMs - 7 * 24 * 60 * 60 * 1000;
+
       if (startMs >= endMs) throw new Error("start가 end보다 같거나 이후입니다.");
 
       // 1) 표시용(4h)
       const rowsDisplay = await fetchRows(DISPLAY_INTERVAL, startMs, endMs);
       renderTable(rowsDisplay);
 
+      // 최신 행
       const last = rowsDisplay.length ? rowsDisplay[rowsDisplay.length - 1] : null;
-      const actualNow = last ? safeActualRate(last) : NaN;
-      const expectedNow = last ? safeExpectedRate(last) : NaN;
+      if (!last) throw new Error("표시 데이터(4h)가 없습니다.");
 
-      // 2) 갭(전환율 기준)
-      const gapPct = (Number.isFinite(actualNow) && Number.isFinite(expectedNow) && expectedNow > 0)
-        ? (actualNow / expectedNow - 1) * 100
-        : NaN;
-
-      const gapLight = labelGapLight(gapPct);
-      setBadge("gapBadge", "gapText", gapLight);
-
-      $("gapDetail").textContent = last?.timestamp
-        ? `last=${last.timestamp} · actual=${fmtRate(actualNow)} · expected=${fmtRate(expectedNow)} · gap=${fmtPct(gapPct,1)}`
-        : "-";
-
-      // KPI: actual / expected
-      $("kpiActual").textContent = fmtRate(actualNow);
-      $("kpiActual2").textContent = last?.timestamp ? `last=${last.timestamp}` : "-";
-
-      $("kpiExpected").textContent = fmtRate(expectedNow);
-      $("kpiExpected2").textContent = Number.isFinite(gapPct) ? `기대 대비 갭 = ${fmtPct(gapPct,1)}` : "-";
-
-      // 3) 기준선(최근 7일 중앙값 @4h) + 상대 신호등
+      // 2) 기준선(최근 7일 중앙값 @4h)
       const rBase = await fetchRBase7dMedian();
-      const light = labelTrafficLight(actualNow, rBase);
-      setBadge("trafficBadge", "trafficText", light);
 
-      const ratio = (Number.isFinite(actualNow) && Number.isFinite(rBase) && rBase > 0) ? (actualNow / rBase) : NaN;
+      // 3) 분석용(1h)
+      const rowsAnalysis = await fetchRows(ANALYSIS_INTERVAL, startMs, endMs);
+
+      // 누적 (표시 4h)
+      let sumPts = 0, sumTok = 0;
+      for (const r of rowsDisplay) {
+        const p = Number(r.ptsAmount);
+        const t = Number(r.tokensAmount);
+        if (Number.isFinite(p)) sumPts += p;
+        if (Number.isFinite(t)) sumTok += t;
+      }
+
+      // R_now (표시 4h 최신) + 기대/실제(절대)
+      const rNow = safeRateFromRow(last);
+      const actualNow = safeActualRate(last);
+      const expectedNow = safeExpectedRate(last);
+
+      // ---- (A) GAP(절대) 카드: 테두리색 + 문구 ----
+      const gapPct = gapPctFromRates(actualNow, expectedNow);
+      const gapLight = labelGapLight(gapPct);
+
+      // 카드 테두리 클래스
+      const gapCard = $("gapCard");
+      gapCard.classList.remove("good","warn","bad");
+      if (gapLight === "초") gapCard.classList.add("good");
+      else if (gapLight === "노") gapCard.classList.add("warn");
+      else if (gapLight === "빨") gapCard.classList.add("bad");
+
+      // 콜아웃 배경
+      const gapCallout = $("gapCallout");
+      setCallout(gapCallout,
+        gapLight === "초" ? "good" : gapLight === "노" ? "warn" : gapLight === "빨" ? "bad" : null
+      );
+
+      // 값 표시
+      $("gapValue").textContent = Number.isFinite(gapPct) ? `${gapPct.toFixed(1)}%` : "-";
+      $("gapDetail").textContent =
+        `last=${last.timestamp} · actual=${fmtRate(actualNow)} · expected=${fmtRate(expectedNow)}`;
+
+      // 해석 문구(요청한 메시지)
+      let gapMsg = "-";
+      if (gapLight === "빨") gapMsg = "지금 전환율은 설계 기대 대비 크게 어긋나 있다.";
+      else if (gapLight === "노") gapMsg = "지금 전환율은 설계 기대 대비 다소 낮다(경계 구간).";
+      else if (gapLight === "초") gapMsg = "지금 전환율은 설계 기대와 크게 어긋나지 않는다.";
+      $("gapMsg").textContent = gapMsg;
+
+      // ---- (B) 상대 신호등(최근 7일 대비) + 문구 ----
+      const light = labelTrafficLight(rNow, rBase);
+      setTrafficBadge(light);
+
+      const ratio = (Number.isFinite(rNow) && Number.isFinite(rBase) && rBase > 0) ? (rNow / rBase) : NaN;
       const ratioText = Number.isFinite(ratio) ? (ratio * 100).toFixed(1) + "%" : "-";
 
-      // 4) 분석용(1h): slope + ETA(상대 기준 유지)
-      const rowsAnalysis = await fetchRows(ANALYSIS_INTERVAL, startMs, endMs);
+      // 상대 콜아웃 배경
+      const relCallout = $("relCallout");
+      setCallout(relCallout,
+        light === "GREEN" ? "good" : light === "YELLOW" ? "warn" : light === "RED" ? "bad" : null
+      );
+
+      let relMsg = "-";
+      if (light === "GREEN") relMsg = "그래도 최근 7일 흐름 안에서는 상대적으로 나쁘지 않다.";
+      else if (light === "YELLOW") relMsg = "최근 7일 대비 애매한 구간이다. 조금 더 지켜볼 만하다.";
+      else if (light === "RED") relMsg = "최근 7일 대비 많이 눌린 상태다. 무리한 진입은 경계.";
+      $("relMsg").textContent = relMsg;
+
+      // slope (분석 1h)
       const slope = recoverySlopePerHour(rowsAnalysis, SLOPE_LOOKBACK_HOURS);
 
+      // ETA targets (상대 신호등과 일치)
+      const tGreen = Number.isFinite(rBase) ? (GREEN_RATIO * rBase) : NaN; // 85%
+      const tRed   = Number.isFinite(rBase) ? (RED_RATIO   * rBase) : NaN; // 70%
+      const tBase  = Number.isFinite(rBase) ? (BASE_RATIO  * rBase) : NaN; // 100%
+
+      // KPI: 최신 전환율
+      $("kpiRnow").textContent = fmtRate(rNow);
+      $("kpiRnow2").textContent = last?.timestamp
+        ? `last=${last.timestamp} · 기준(최근7d median)=${fmtRate(rBase)} · ratio=${ratioText}`
+        : "-";
+
+      // KPI: 회복속도
       $("kpiSlope").textContent = slopeText(slope);
-      $("kpiSlope2").textContent = `lookback=${SLOPE_LOOKBACK_HOURS}h (1h 데이터 기준)`;
+      $("kpiSlope2").textContent = `lookback=${SLOPE_LOOKBACK_HOURS}h`;
 
-      const tGreen = Number.isFinite(rBase) ? (GREEN_RATIO * rBase) : NaN;
-      const tRed   = Number.isFinite(rBase) ? (RED_RATIO   * rBase) : NaN;
-      const tBase  = Number.isFinite(rBase) ? (BASE_RATIO  * rBase) : NaN;
-
-      if (!Number.isFinite(slope) || slope === 0 || !Number.isFinite(actualNow) || !Number.isFinite(rBase)) {
+      // KPI: ETA (상대 목표로 통일)
+      if (!Number.isFinite(slope) || slope === 0 || !Number.isFinite(rNow) || !Number.isFinite(rBase)) {
         $("kpiEta").textContent = "-";
         $("kpiEta2").textContent = "ETA 계산 불가 (데이터/기울기 부족)";
       } else if (slope > 0) {
-        let etaGreen = (tGreen - actualNow) / slope;
-        let etaBase  = (tBase  - actualNow) / slope;
+        // 회복: GREEN(85%) / BASE(100%)
+        let etaGreen = (tGreen - rNow) / slope;
+        let etaBase  = (tBase  - rNow) / slope;
         if (Number.isFinite(etaGreen) && etaGreen < 0) etaGreen = 0;
         if (Number.isFinite(etaBase)  && etaBase  < 0) etaBase  = 0;
 
         $("kpiEta").textContent = `${humanizeHours(etaGreen)} / ${humanizeHours(etaBase)}`;
-        $("kpiEta2").textContent = "회복 ETA: GREEN(85%) / BASE(100%) (선형 추정, 최근 7일 상대 기준)";
+        $("kpiEta2").textContent = "회복 ETA: GREEN(85%) / BASE(100%) (선형 추정)";
       } else {
-        let etaRed = (tRed - actualNow) / slope; // slope<0
+        // 악화: RED(70%) 도달 예상
+        let etaRed = (tRed - rNow) / slope;
         if (Number.isFinite(etaRed) && etaRed < 0) etaRed = NaN;
 
         $("kpiEta").textContent = humanizeHours(etaRed);
-        $("kpiEta2").textContent = "악화 ETA: RED(70%) 진입 예상 (선형 추정, 최근 7일 상대 기준)";
+        $("kpiEta2").textContent = "악화 ETA: RED(70%) 진입 예상 (선형 추정)";
       }
 
+      // KPI: 누적
+      $("kpiCum").textContent = `${fmtNum(sumPts,2)} / ${fmtNum(sumTok,6)}`;
+      $("kpiCum2").textContent = "Pts / Tokens (선택 기간 합)";
+
       $("statusText").textContent =
-        `상대신호등=${light} (ratio=${ratioText}) · rBase(7d median)=${fmtRate(rBase)} · slope=${slopeText(slope)}`;
+        `절대갭=${Number.isFinite(gapPct)?gapPct.toFixed(1)+"%":"-"}(${gapLight}) · 상대=${light} (ratio=${ratioText}) · slope=${slopeText(slope)}`;
 
     } catch (e) {
       showError(String(e?.message || e));
@@ -548,7 +658,11 @@
     });
 
     $("btn").addEventListener("click", load);
+
+    // auto load
+    load();
   })();
 </script>
 </body>
 </html>
+```0
